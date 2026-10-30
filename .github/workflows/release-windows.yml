@@ -1,0 +1,60 @@
+name: Build and Release Windows x64
+
+on:
+  push:
+    branches:
+      - master # Verander dit naar 'main' als je standaard branch zo heet
+
+jobs:
+  release:
+    name: Build Windows Binary & Create Release
+    runs-on: ubuntu-latest
+    
+    # Geef de workflow schrijfrechten om releases aan te kunnen maken
+    permissions:
+      contents: write
+
+    steps:
+    # 1. Haal de code uit je repository op
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    # 2. Installeer de Rust toolchain + de Windows target (cross-compilation)
+    - name: Setup Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-gnu
+
+    # 3. Installeer de nodige cross-compiler voor Ubuntu naar Windows
+    - name: Install MinGW Web compiler
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y mingw-w64
+
+    # 4. Cache inschakelen om builds drastisch te versnellen
+    - name: Cache Cargo dependencies
+      uses: Swatinem/rust-cache@v2
+
+    # 5. Compileer het project voor Windows 64-bit in Release modus
+    - name: Build project for Windows
+      run: cargo build --release --target x86_64-pc-windows-gnu
+
+    # 6. Genereer een unieke tag-naam op basis van de datum en commit-hash
+    - name: Generate Release Tag
+      id: tag
+      run: echo "release_tag=build-$(date +'%Y%m%d')-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+    # 7. Maak de GitHub Release aan en voeg de Windows .exe toe
+    - name: Create Release and Upload Artifact
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        name: Release ${{ steps.tag.outputs.release_tag }}
+        body: |
+          Automatische Windows x64 build gegenereerd op basis van commit ${{ github.sha }}.
+          
+          **Commit bericht:** ${{ github.event.head_commit.message }}
+        draft: false
+        prerelease: false
+        files: |
+          target/x86_64-pc-windows-gnu/release/pumpkin.exe
