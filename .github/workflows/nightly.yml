@@ -41,22 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            asset: pumpkin-X64-Linux
-          - os: ubuntu-latest
-            asset: pumpkin-X64-Linux-musl
-            target: x86_64-unknown-linux-musl
-          - os: ubuntu-26.04-arm
-            asset: pumpkin-ARM64-Linux
-          - os: ubuntu-26.04-arm
-            asset: pumpkin-ARM64-Linux-musl
-            target: aarch64-unknown-linux-musl
           - os: windows-latest
             asset: pumpkin-X64-Windows.exe
-          - os: windows-11-arm
-            asset: pumpkin-ARM64-Windows.exe
-          - os: macos-latest
-            asset: pumpkin-ARM64-macOS
     steps:
       - uses: actions/checkout@v7
         with:
