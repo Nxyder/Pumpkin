@@ -20,9 +20,7 @@ use crate::{
     slot::NormalSlot,
 };
 
-/// Creates a generic 9x3 container (single chest).
-///
-/// Used for single chests, ender chests, and similar containers.
+
 pub fn create_generic_9x3(
     sync_id: u8,
     player_inventory: &Arc<PlayerInventory>,
@@ -40,9 +38,7 @@ pub fn create_generic_9x3(
     )
 }
 
-/// Creates a generic 9x6 container (double chest).
-///
-/// Used for double chests and similar large containers.
+
 pub fn create_generic_9x6(
     sync_id: u8,
     player_inventory: &Arc<PlayerInventory>,
@@ -60,9 +56,7 @@ pub fn create_generic_9x6(
     )
 }
 
-/// Creates a generic 3x3 container.
-///
-/// Used for dispensers, droppers, and similar containers.
+
 pub fn create_generic_3x3(
     sync_id: u8,
     player_inventory: &Arc<PlayerInventory>,
@@ -80,7 +74,6 @@ pub fn create_generic_3x3(
     )
 }
 
-/// Creates a crafter container (9 slots, 3x3 layout).
 pub fn create_crafter_3x3(
     sync_id: u8,
     player_inventory: &Arc<PlayerInventory>,
@@ -98,9 +91,6 @@ pub fn create_crafter_3x3(
     )
 }
 
-/// Creates a hopper container (5 slots).
-///
-/// Hoppers have a single row of 5 slots.
 pub fn create_hopper(
     sync_id: u8,
     player_inventory: &Arc<PlayerInventory>,
@@ -118,34 +108,15 @@ pub fn create_hopper(
     )
 }
 
-/// Generic container screen handler.
-///
-/// Handles simple grid-based containers without special behaviors.
-/// The container grid is followed by the player's inventory (27 slots + 9 hotbar).
 pub struct GenericContainerScreenHandler {
-    /// The container's inventory.
     pub inventory: Arc<dyn Inventory>,
-    /// Number of rows in the container grid.
     pub rows: u8,
-    /// Number of columns in the container grid.
     pub columns: u8,
-    /// Whether the opener is in spectator mode.
     pub is_spectator: bool,
-    /// Core screen handler behavior (slots, sync ID, listeners).
     behaviour: ScreenHandlerBehaviour,
 }
 
 impl GenericContainerScreenHandler {
-    /// Creates a new generic container screen handler.
-    ///
-    /// # Arguments
-    /// - `screen_type` - The window type for this container
-    /// - `sync_id` - The sync ID for client-server matching
-    /// - `player_inventory` - The player's inventory
-    /// - `inventory` - The container's inventory
-    /// - `rows` - Number of rows in the container
-    /// - `columns` - Number of columns in the container
-    /// - `is_spectator` - Whether the opener is a spectator
     fn new(
         screen_type: WindowType,
         sync_id: u8,
@@ -174,7 +145,6 @@ impl GenericContainerScreenHandler {
         handler
     }
 
-    /// Adds slots for the container's inventory grid.
     fn add_inventory_slots(&mut self) {
         for i in 0..self.rows {
             for j in 0..self.columns {
@@ -211,13 +181,8 @@ impl ScreenHandler for GenericContainerScreenHandler {
         }
     }
 
-    /// Quick move logic for generic containers.
-    ///
-    /// - From container: Move to player inventory (end first)
-    /// - From player inventory: Move to container (start first)
     fn quick_move(&mut self, _player: &dyn InventoryPlayer, slot_index: i32) -> ItemStack {
         let mut stack_left = ItemStack::EMPTY.clone();
-        // Assuming bounds check passed for slot_index by caller or within quick_move spec
         let slot = self.get_behaviour().slots[slot_index as usize].clone();
 
         if slot.has_stack() {
@@ -225,7 +190,6 @@ impl ScreenHandler for GenericContainerScreenHandler {
             stack_left = slot_stack.clone();
 
             if slot_index < i32::from(self.rows * 9) {
-                // Move from inventory to player area (end)
                 if !self.insert_item(
                     &mut slot_stack,
                     (self.rows * 9).into(),
@@ -235,11 +199,9 @@ impl ScreenHandler for GenericContainerScreenHandler {
                     return ItemStack::EMPTY.clone();
                 }
             } else if !self.insert_item(&mut slot_stack, 0, (self.rows * 9).into(), false) {
-                // Move from player area to inventory (start)
                 return ItemStack::EMPTY.clone();
             }
 
-            // Check the resulting state of the slot stack after insert_item
             if slot_stack.is_empty() {
                 slot.set_stack(ItemStack::EMPTY.clone());
             } else {
