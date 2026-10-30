@@ -118,23 +118,31 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # Gebruik de PAT in plaats van de standaard GITHUB_TOKEN
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
+          
       - name: Download prebuilt binary artifacts
         uses: actions/download-artifact@v8
         with:
           pattern: "pumpkin-*"
           path: dist/
           merge-multiple: true
+          
       - name: Generate release notes
         run: |
           tree dist/
           echo "From commit: $(git rev-parse --short HEAD)" > dist/RELEASE.md
           echo "Generated on: $(date -u +"%Y-%m-%d %H:%M") UTC" >> dist/RELEASE.md
           cat dist/RELEASE.md
+          
       - name: Update the nightly tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Zorg dat de push de PAT gebruikt via de remote URL
+          git remote set-url origin https://x-access-token:${{ secrets.NIGHTLY_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
           git tag --force nightly && git push --force origin tag nightly
+          
       - name: Draft a nightly GitHub release
         uses: softprops/action-gh-release@v3
         with:
@@ -143,3 +151,5 @@ jobs:
           tag_name: nightly
           name: Nightly Build
           body_path: dist/RELEASE.md
+          # Geef de PAT ook mee aan de release actie voor de zekerheid
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
