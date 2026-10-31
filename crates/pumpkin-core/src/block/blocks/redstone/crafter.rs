@@ -23,7 +23,7 @@ use pumpkin_data::world::WorldEvent;
 use pumpkin_data::{Block, BlockDirection, BlockStateId, FacingExt};
 use pumpkin_inventory::Inventory;
 use pumpkin_inventory::crafting::crafting_screen_handler::match_crafting_recipe;
-use pumpkin_inventory::generic_container_screen_handler::create_crafter_3x3;
+use pumpkin_inventory::crafter_screen_handler::CrafterScreenHandler;
 use pumpkin_inventory::player::player_inventory::PlayerInventory;
 use pumpkin_inventory::screen_handler::{
     InventoryPlayer, ScreenHandlerFactory, SharedScreenHandler,
@@ -44,7 +44,12 @@ impl ScreenHandlerFactory for CrafterScreenFactory {
         player_inventory: &Arc<PlayerInventory>,
         player: &dyn InventoryPlayer,
     ) -> Option<SharedScreenHandler> {
-        let handler = create_crafter_3x3(sync_id, player_inventory, self.0.clone(), player);
+        let handler = CrafterScreenHandler::new(
+            sync_id, 
+            player_inventory, 
+            self.0.clone(), 
+            player
+        );
         let screen_handler_arc = Arc::new(Mutex::new(handler));
 
         Some(screen_handler_arc as SharedScreenHandler)
