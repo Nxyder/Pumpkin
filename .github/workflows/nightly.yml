@@ -75,44 +75,11 @@ jobs:
           compression-level: 9
           path: dist/${{ matrix.asset }}
 
-  build_android:
-    name: Build pumpkin-aarch64-android
-    needs: check
-    if: needs.check.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-      - run: rustup update stable && rustup default stable
-      - run: rustup target add aarch64-linux-android
-      - uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27c
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: android
-      - run: cargo install cargo-ndk
-      - name: Build release with cargo ndk
-        env:
-          CARGO_NDK_PLATFORM: 24
-        run: cargo ndk -t arm64-v8a build --release --locked
-      - name: Prepare artifact
-        run: |
-          mkdir -p dist
-          cp target/aarch64-linux-android/release/pumpkin dist/pumpkin-aarch64-android
-      - uses: actions/upload-artifact@v7
-        with:
-          name: pumpkin-aarch64-android
-          compression-level: 9
-          path: dist/pumpkin-aarch64-android
-
   draft_release:
     name: Draft nightly release
     permissions:
       contents: write
-    needs: [build, build_android]
+    needs: [build] # <-- Aangepast: wacht alleen nog op de 'build' job
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
