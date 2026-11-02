@@ -16,7 +16,7 @@ env:
 jobs:
   check:
     name: Check for new commits
-    if: github.repository == 'Pumpkin-MC/Pumpkin'
+    if: github.repository == 'Nxyder/Pumpkin'
     runs-on: ubuntu-slim
     outputs:
       changed: ${{ steps.check.outputs.changed }}
@@ -41,22 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            asset: pumpkin-X64-Linux
-          - os: ubuntu-latest
-            asset: pumpkin-X64-Linux-musl
-            target: x86_64-unknown-linux-musl
-          - os: ubuntu-26.04-arm
-            asset: pumpkin-ARM64-Linux
-          - os: ubuntu-26.04-arm
-            asset: pumpkin-ARM64-Linux-musl
-            target: aarch64-unknown-linux-musl
           - os: windows-latest
             asset: pumpkin-X64-Windows.exe
-          - os: windows-11-arm
-            asset: pumpkin-ARM64-Windows.exe
-          - os: macos-latest
-            asset: pumpkin-ARM64-macOS
     steps:
       - uses: actions/checkout@v7
         with:
@@ -89,66 +75,41 @@ jobs:
           compression-level: 9
           path: dist/${{ matrix.asset }}
 
-  build_android:
-    name: Build pumpkin-aarch64-android
-    needs: check
-    if: needs.check.outputs.changed == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 240
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          submodules: recursive
-      - run: rustup update stable && rustup default stable
-      - run: rustup target add aarch64-linux-android
-      - uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r27c
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: android
-      - run: cargo install cargo-ndk
-      - name: Build release with cargo ndk
-        env:
-          CARGO_NDK_PLATFORM: 24
-        run: cargo ndk -t arm64-v8a build --release --locked
-      - name: Prepare artifact
-        run: |
-          mkdir -p dist
-          cp target/aarch64-linux-android/release/pumpkin dist/pumpkin-aarch64-android
-      - uses: actions/upload-artifact@v7
-        with:
-          name: pumpkin-aarch64-android
-          compression-level: 9
-          path: dist/pumpkin-aarch64-android
-
   draft_release:
     name: Draft nightly release
     permissions:
       contents: write
-    needs: [build, build_android]
+    needs: [build] # <-- Aangepast: wacht alleen nog op de 'build' job
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: recursive
+          # Gebruik de PAT in plaats van de standaard GITHUB_TOKEN
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
+          
       - name: Download prebuilt binary artifacts
         uses: actions/download-artifact@v8
         with:
           pattern: "pumpkin-*"
           path: dist/
           merge-multiple: true
+          
       - name: Generate release notes
         run: |
           tree dist/
           echo "From commit: $(git rev-parse --short HEAD)" > dist/RELEASE.md
           echo "Generated on: $(date -u +"%Y-%m-%d %H:%M") UTC" >> dist/RELEASE.md
           cat dist/RELEASE.md
+          
       - name: Update the nightly tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Zorg dat de push de PAT gebruikt via de remote URL
+          git remote set-url origin https://x-access-token:${{ secrets.NIGHTLY_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
           git tag --force nightly && git push --force origin tag nightly
+          
       - name: Draft a nightly GitHub release
         uses: softprops/action-gh-release@v3
         with:
@@ -157,3 +118,5 @@ jobs:
           tag_name: nightly
           name: Nightly Build
           body_path: dist/RELEASE.md
+          # Geef de PAT ook mee aan de release actie voor de zekerheid
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
