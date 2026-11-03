@@ -43,17 +43,23 @@ impl SmithingTableScreenHandler {
             recipe_provider,
         };
 
-        handler.add_slot(Arc::new(NormalSlot::new(
+        handler.add_slot(Arc::new(SmithingInputSlot::new(
             handler.input_inventory.clone(),
             0,
+            0, // Template
+            handler.recipe_provider.clone(),
         )));
-        handler.add_slot(Arc::new(NormalSlot::new(
+        handler.add_slot(Arc::new(SmithingInputSlot::new(
             handler.input_inventory.clone(),
             1,
+            1, // Base
+            handler.recipe_provider.clone(),
         )));
-        handler.add_slot(Arc::new(NormalSlot::new(
+        handler.add_slot(Arc::new(SmithingInputSlot::new(
             handler.input_inventory.clone(),
             2,
+            2, // Addition
+            handler.recipe_provider.clone(),
         )));
         handler.add_slot(Arc::new(SmithingOutputSlot::new(
             handler.output_inventory.clone(),
@@ -268,6 +274,139 @@ impl ScreenHandler for SmithingTableScreenHandler {
     fn on_closed(&mut self, player: &dyn InventoryPlayer) {
         self.default_on_closed(player);
         self.drop_inventory(player, self.input_inventory.clone());
+    }
+}
+
+pub struct SmithingInputSlot {
+    pub inventory: Arc<dyn Inventory>,
+    pub index: usize,
+    pub slot_type: u8, // 0 = Template, 1 = Base, 2 = Addition
+    pub id: AtomicU8,
+    pub recipe_provider: Option<Arc<dyn RecipeProvider>>,
+}
+
+impl SmithingInputSlot {
+    pub fn new(
+        inventory: Arc<dyn Inventory>,
+        index: usize,
+        slot_type: u8,
+        recipe_provider: Option<Arc<dyn RecipeProvider>>,
+    ) -> Self {
+        Self {
+            inventory,
+            index,
+            slot_type,
+            id: AtomicU8::new(0),
+            recipe_provider,
+        }
+    }
+
+    fn is_valid_for_slot(&self, stack: &ItemStack) -> bool {
+        if stack.is_empty() {
+            return true;
+        }
+
+        let item = stack.item;
+
+        // Base-slot (index 1): Check of het item een tool of armor is.
+        // Dit is de standaard vanilla regel voor transformaties (Netherite, etc.).
+        if self.slot_type == 1 {
+            let key = item.registry_key;
+            return key.contains("sword")
+                || key.contains("pickaxe")
+                || key.contains("axe")
+                || key.contains("shovel")
+                || key.contains("hoe")
+                || key.contains("helmet")
+                || key.contains("chestplate")
+                || key.contains("leggings")
+                || key.contains("boots")
+                || key.contains("turtle_helmet");
+        }
+
+        // Template-slot (0) en Addition-slot (2): Gebruik de recipe data.
+        // Als een item in een geregistreerd recept voorkomt in deze rol, is het geldig.
+        if let Some(provider) = &self.recipe_provider {
+            for dynamic in provider.get_dynamic_recipes() {
+                match dynamic {
+                    DynamicRecipe::SmithingTransform(recipe) => {
+                        if self.slot_type == 0 && recipe.template.match_item(item) {
+                            return true;
+                        }
+                        if self.slot_type == 2 && recipe.addition.match_item(item) {
+                            return true;
+                        }
+                    }
+                    DynamicRecipe::SmithingTrim(recipe) => {
+                        if self.slot_type == 0 && recipe.template.match_item(item) {
+                            return true;
+                        }
+                        if self.slot_type == 2 && recipe.addition.match_item(item) {
+                            return true;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Fallback voor vanilla items als er geen datapack recepten zijn geladen.
+        if self.slot_type == 0 {
+            return item.registry_key.contains("smithing_template");
+        }
+        if self.slot_type == 2 {
+            return item.registry_key.contains("ingot")
+                || item.registry_key.contains("diamond")
+                || item.registry_key.contains("emerald")
+                || item.registry_key.contains("quartz")
+                || item.registry_key.contains("netherite_scrap")
+                || item.registry_key.contains("lapis")
+                || item.registry_key.contains("amethyst");
+        }
+
+        false
+    }
+}
+
+impl Slot for SmithingInputSlot {
+    fn get_inventory(&self) -> Arc<dyn Inventory> {
+        self.inventory.clone()
+    }
+
+    fn get_index(&self) -> usize {
+        self.index
+    }
+
+    fn set_id(&self, id: usize) {
+        self.id.store(id as u8, Ordering::Relaxed);
+    }
+
+    fn get_stack(&self) -> ItemStack {
+        self.inventory.get_stack(self.index)
+    }
+
+    fn get_cloned_stack(&self) -> ItemStack {
+        self.inventory.get_stack(self.index)
+    }
+
+    fn has_stack(&self) -> bool {
+        !self.inventory.get_stack(self.index).is_empty()
+    }
+
+    fn set_stack(&self, stack: ItemStack) {
+        self.inventory.set_stack(self.index, stack);
+    }
+
+    fn set_stack_prev(&self, _stack: ItemStack, _previous_stack: ItemStack) {
+        // Do nothing
+    }
+
+    fn mark_dirty(&self) {
+        self.inventory.mark_dirty();
+    }
+
+    fn can_insert(&self, stack: &ItemStack) -> bool {
+        self.is_valid_for_slot(stack)
     }
 }
 
