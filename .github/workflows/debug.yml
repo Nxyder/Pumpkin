@@ -1,4 +1,4 @@
-name: Debug
+name: Nightly (Debug)
 
 on:
   schedule:
@@ -21,10 +21,10 @@ jobs:
     outputs:
       changed: ${{ steps.check.outputs.changed }}
     steps:
-      - name: Compare master with the nightly tag
+      - name: Compare master with the nightly-debug tag
         id: check
         run: |
-          LAST=$(git ls-remote "https://github.com/${{ github.repository }}" refs/tags/nightly | cut -d/ -f1)
+          LAST=$(git ls-remote "https://github.com/${{ github.repository }}" refs/tags/nightly-debug | cut -f1)
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "$LAST" != "${{ github.sha }}" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
@@ -76,7 +76,7 @@ jobs:
           path: dist/${{ matrix.asset }}
 
   draft_release:
-    name: Draft nightly release
+    name: Draft nightly debug release
     permissions:
       contents: write
     needs: [build]
@@ -101,19 +101,19 @@ jobs:
           echo "Generated on: $(date -u +"%Y-%m-%d %H:%M") UTC" >> dist/RELEASE.md
           cat dist/RELEASE.md
           
-      - name: Update the nightly tag
+      - name: Update the nightly-debug tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git remote set-url origin https://x-access-token:${{ secrets.NIGHTLY_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
-          git tag --force nightly && git push --force origin tag nightly
+          git tag --force nightly-debug && git push --force origin tag nightly-debug
           
-      - name: Draft a nightly GitHub release
+      - name: Draft a nightly debug GitHub release
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
           files: dist/pumpkin*
-          tag_name: nightly
-          name: Nightly Build (Debug)
+          tag_name: nightly-debug
+          name: Debug Build
           body_path: dist/RELEASE.md
           token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
