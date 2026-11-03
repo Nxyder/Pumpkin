@@ -189,10 +189,6 @@ fn deserialize_consume_effect(
             Ok(ConsumeEffect::TeleportRandomly(diameter))
         }
         4 => {
-            // Need to read IdOr<SoundEvent> manually. This depends on how it is serialized.
-            // In vanilla, it's either an id (0) or a sound event (1) ... but wait, `crate::IdOr<crate::SoundEvent>` doesn't have a `NetworkReadExt` method.
-            // Let's defer this and assume it implements `read` for now or wait, `IdOr` does implement `PacketRead` or something?
-            // Actually, we can just use `IdOr::read` if we impl it, but let's change it to:
             let proto_sound_event = crate::IdOr::<crate::SoundEvent>::read(seq, |r| {
                 let sound_name = r.get_str()?.into();
                 let range = r.get_option(NetworkReadExt::get_f32)?;
@@ -2494,8 +2490,22 @@ impl DataComponentCodec<Self> for WrittenBookContentImpl {
 
 impl DataComponentCodec<Self> for TrimImpl {
     fn serialize(&self, seq: &mut impl NetworkWriteExt) -> Result<(), WritingError> {
-        seq.write_var_int(&VarInt(0))?;
-        seq.write_var_int(&VarInt(0))
+        let mat_str = match &self.material {
+            NbtTag::String(s) => s.as_ref(),
+            _ => "minecraft:quartz",
+        };
+        let pat_str = match &self.pattern {
+            NbtTag::String(s) => s.as_ref(),
+            _ => "minecraft:coast",
+        };
+
+        let mat_id = pumpkin_data::trim_material::TrimMaterial::from_name(mat_str)
+            .map_or(0, |m| m.id() as i32);
+        let pat_id = pumpkin_data::trim_pattern::TrimPattern::from_name(pat_str)
+            .map_or(0, |p| p.id() as i32);
+
+        seq.write_var_int(&VarInt(mat_id))?;
+        seq.write_var_int(&VarInt(pat_id))
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
