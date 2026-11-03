@@ -2509,11 +2509,20 @@ impl DataComponentCodec<Self> for TrimImpl {
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let _material = seq.get_var_int()?;
-        let _pattern = seq.get_var_int()?;
+        let mat_id = seq.get_var_int()?.0 as usize;
+        let pat_id = seq.get_var_int()?.0 as usize;
+
+        let material = pumpkin_data::trim_material::TrimMaterial::all()
+            .get(mat_id)
+            .map_or("minecraft:quartz", |m| m.asset_id());
+        
+        let pattern = pumpkin_data::trim_pattern::TrimPattern::all()
+            .get(pat_id)
+            .map_or("minecraft:coast", |p| p.asset_id());
+
         Ok(Self {
-            material: NbtTag::String("minecraft:quartz".into()),
-            pattern: NbtTag::String("minecraft:coast".into()),
+            material: NbtTag::String(Cow::Owned(material.to_string())),
+            pattern: NbtTag::String(Cow::Owned(pattern.to_string())),
         })
     }
 }
