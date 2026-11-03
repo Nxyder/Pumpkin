@@ -1,0 +1,119 @@
+name: Nightly Release
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  check:
+    name: Check for new commits
+    if: github.repository == 'Nxyder/Pumpkin'
+    runs-on: ubuntu-slim
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - name: Compare master with the nightly tag
+        id: check
+        run: |
+          LAST=$(git ls-remote "https://github.com/${{ github.repository }}" refs/tags/nightly | cut -d/ -f1)
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] || [ "$LAST" != "${{ github.sha }}" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    name: Build debug
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: pumpkin-X64-Windows-Debug.exe
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - run: rustup update stable && rustup default stable
+      - name: Add musl target
+        if: matrix.target
+        run: |
+          rustup target add ${{ matrix.target }}
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.asset }}
+      - name: Build debug
+        shell: bash
+        run: cargo build --verbose ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          EXT=""
+          if [ "${{ runner.os }}" == "Windows" ]; then EXT=".exe"; fi
+          DIR="target/debug"
+          if [ -n "${{ matrix.target }}" ]; then DIR="target/${{ matrix.target }}/debug"; fi
+          cp "$DIR/pumpkin$EXT" "dist/${{ matrix.asset }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.asset }}
+          compression-level: 9
+          path: dist/${{ matrix.asset }}
+
+  draft_release:
+    name: Draft nightly release
+    permissions:
+      contents: write
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
+          
+      - name: Download prebuilt binary artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: "pumpkin-*"
+          path: dist/
+          merge-multiple: true
+          
+      - name: Generate release notes
+        run: |
+          tree dist/
+          echo "From commit: $(git rev-parse --short HEAD)" > dist/RELEASE.md
+          echo "Generated on: $(date -u +"%Y-%m-%d %H:%M") UTC" >> dist/RELEASE.md
+          cat dist/RELEASE.md
+          
+      - name: Update the nightly tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.NIGHTLY_PUSH_TOKEN }}@github.com/${{ github.repository }}.git
+          git tag --force nightly && git push --force origin tag nightly
+          
+      - name: Draft a nightly GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          prerelease: true
+          files: dist/pumpkin*
+          tag_name: nightly
+          name: Nightly Build (Debug)
+          body_path: dist/RELEASE.md
+          token: ${{ secrets.NIGHTLY_PUSH_TOKEN }}
