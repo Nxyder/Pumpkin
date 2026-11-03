@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use crate::crafting::recipe_provider::RecipeProvider;
 use crate::player::player_inventory::PlayerInventory;
 use crate::screen_handler::{InventoryPlayer, ScreenHandler, ScreenHandlerBehaviour};
-use crate::slot::{NormalSlot, Slot};
+use crate::slot::Slot;
 
 use crate::inventory::Inventory;
 use crate::inventory::SimpleInventory;
