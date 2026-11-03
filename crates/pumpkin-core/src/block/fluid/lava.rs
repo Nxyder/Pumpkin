@@ -237,11 +237,9 @@ impl FluidBehaviour for FlowingLava {
             }
 
             let above_pos = test_pos.up();
-            if world
-                .get_block_state_if_loaded(&above_pos)
-                .is_some_and(BlockState::is_air)
-                && Self::is_flammable(world, &test_pos)
-            {
+            let (above_block, _) = world.get_block_and_state_id(&above_pos);
+
+            if above_block.id == Block::AIR.id && Self::is_flammable(world, &test_pos) {
                 Self::ignite_fire_if_possible(world, &above_pos);
             }
         }
