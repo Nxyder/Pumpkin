@@ -2521,8 +2521,8 @@ impl DataComponentCodec<Self> for TrimImpl {
             .map_or("minecraft:coast", |p| p.asset_id());
 
         Ok(Self {
-            material: NbtTag::String(Cow::Owned(material.to_string())),
-            pattern: NbtTag::String(Cow::Owned(pattern.to_string())),
+            material: NbtTag::String(material.to_string().into()),
+            pattern: NbtTag::String(pattern.to_string().into()),
         })
     }
 }
