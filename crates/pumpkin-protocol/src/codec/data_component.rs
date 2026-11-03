@@ -52,22 +52,35 @@ pub fn proto_to_data_sound(id_or: &crate::IdOr<crate::SoundEvent>) -> Option<IdO
     }
 }
 
-fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-    let mat_id = seq.get_var_int()?.0 as usize;
-    let pat_id = seq.get_var_int()?.0 as usize;
-    
-    let material = pumpkin_data::trim_material::TrimMaterial::all()
-        .get(mat_id)
-        .map_or("minecraft:quartz", |m| m.asset_id());
-        
-    let pattern = pumpkin_data::trim_pattern::TrimPattern::all()
-        .get(pat_id)
-        .map_or("minecraft:coast", |p| p.asset_id());
+fn deserialize_idset<T: IDSetContent>(
+    seq: &mut impl NetworkReadExt,
+) -> Result<IDSet<T>, ReadingError> {
+    let id_type = seq.get_var_int()?.0;
 
-    Ok(Self {
-        material: NbtTag::String(format!("minecraft:{}", material).into()),
-        pattern: NbtTag::String(format!("minecraft:{}", pattern).into()),
-    })
+    match id_type.cmp(&0) {
+        std::cmp::Ordering::Equal => {
+            let tag = seq.get_str()?;
+            Ok(IDSet::Tag(Cow::Owned(tag.into())))
+        }
+        std::cmp::Ordering::Greater => {
+            let len = id_type - 1;
+            let mut content_vec =
+                Vec::with_capacity((len as usize).min(MAX_INITIAL_COLLECTION_SIZE));
+
+            for _ in 0..len {
+                let varint_id = seq.get_var_int()?.0;
+
+                let elmt = T::from_id(varint_id as u16).ok_or(ReadingError::Message(
+                    "Invalid registry id VarInt in IDSet".into(),
+                ))?;
+                content_vec.push(elmt);
+            }
+            Ok(IDSet::IDs(Cow::Owned(content_vec)))
+        }
+        std::cmp::Ordering::Less => Result::Err(ReadingError::Message(
+            "Negative type/len VarInt in IDSet".into(),
+        )),
+    }
 }
 
 fn serialize_idset<C: IDSetContent>(
@@ -2496,18 +2509,20 @@ impl DataComponentCodec<Self> for TrimImpl {
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let mat_id = seq.get_var_int()?.0 as u16;
-        let pat_id = seq.get_var_int()?.0 as u16;
+        let mat_id = seq.get_var_int()?.0 as usize;
+        let pat_id = seq.get_var_int()?.0 as usize;
 
-        let material = pumpkin_data::trim_material::TrimMaterial::from_id(mat_id)
+        let material = pumpkin_data::trim_material::TrimMaterial::all()
+            .get(mat_id)
             .map_or("minecraft:quartz", |m| m.asset_id());
         
-        let pattern = pumpkin_data::trim_pattern::TrimPattern::from_id(pat_id)
+        let pattern = pumpkin_data::trim_pattern::TrimPattern::all()
+            .get(pat_id)
             .map_or("minecraft:coast", |p| p.asset_id());
 
         Ok(Self {
-            material: NbtTag::String(material.to_string().into()),
-            pattern: NbtTag::String(pattern.to_string().into()),
+            material: NbtTag::String(format!("minecraft:{}", material).into()),
+            pattern: NbtTag::String(format!("minecraft:{}", pattern).into()),
         })
     }
 }
