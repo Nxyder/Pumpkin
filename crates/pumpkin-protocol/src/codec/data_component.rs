@@ -2509,15 +2509,13 @@ impl DataComponentCodec<Self> for TrimImpl {
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let mat_id = seq.get_var_int()?.0 as usize;
-        let pat_id = seq.get_var_int()?.0 as usize;
+        let mat_id = seq.get_var_int()?.0 as u16;
+        let pat_id = seq.get_var_int()?.0 as u16;
 
-        let material = pumpkin_data::trim_material::TrimMaterial::all()
-            .get(mat_id)
+        let material = pumpkin_data::trim_material::TrimMaterial::from_id(mat_id)
             .map_or("minecraft:quartz", |m| m.asset_id());
         
-        let pattern = pumpkin_data::trim_pattern::TrimPattern::all()
-            .get(pat_id)
+        let pattern = pumpkin_data::trim_pattern::TrimPattern::from_id(pat_id)
             .map_or("minecraft:coast", |p| p.asset_id());
 
         Ok(Self {
