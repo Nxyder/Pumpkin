@@ -2504,13 +2504,17 @@ impl DataComponentCodec<Self> for TrimImpl {
         let pat_id = pumpkin_data::trim_pattern::TrimPattern::from_name(pat_str)
             .map_or(0, |p| p.id() as i32);
 
-        seq.write_var_int(&VarInt(mat_id))?;
-        seq.write_var_int(&VarInt(pat_id))
+        // ID or X: registry ID + 1
+        seq.write_var_int(&VarInt(mat_id + 1))?;
+        seq.write_var_int(&VarInt(pat_id + 1))
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let mat_id = seq.get_var_int()?.0 as u32;
-        let pat_id = seq.get_var_int()?.0 as u32;
+        let mat_raw = seq.get_var_int()?.0;
+        let pat_raw = seq.get_var_int()?.0;
+
+        let mat_id = (mat_raw - 1) as u32;
+        let pat_id = (pat_raw - 1) as u32;
 
         let material = pumpkin_data::trim_material::TrimMaterial::all()
             .iter()
