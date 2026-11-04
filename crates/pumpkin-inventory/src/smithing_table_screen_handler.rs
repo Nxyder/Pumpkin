@@ -18,7 +18,7 @@ use pumpkin_data::statistic::StatisticCategory;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_protocol::codec::recipe::DynamicRecipe;
 use pumpkin_protocol::java::server::play::SlotActionType;
-use tracing::{info, warn};
+use tracing::warn;
 
 pub struct SmithingTableScreenHandler {
     behaviour: ScreenHandlerBehaviour,
@@ -221,7 +221,7 @@ impl SmithingTableScreenHandler {
             result.item_count = 1;
             result.set_data_component(TrimImpl {
                 material: NbtTag::String(material.to_string().into()),
-                pattern: NbtTag::String(pattern.into()),
+                pattern: NbtTag::String(pattern.clone().into()),
             });
 
             warn!("[SMITHING DEBUG] Setting output to trim: material={}, pattern={}", material, pattern);
