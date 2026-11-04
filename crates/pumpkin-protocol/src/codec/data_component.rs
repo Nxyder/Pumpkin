@@ -2504,20 +2504,25 @@ impl DataComponentCodec<Self> for TrimImpl {
         let pat_id = pumpkin_data::trim_pattern::TrimPattern::from_name(pat_str)
             .map_or(0, |p| p.id() as i32);
 
+        seq.write_bool(true)?;
         seq.write_var_int(&VarInt(mat_id))?;
         seq.write_var_int(&VarInt(pat_id))
     }
 
     fn deserialize(seq: &mut impl NetworkReadExt) -> Result<Self, ReadingError> {
-        let mat_id = seq.get_var_int()?.0 as usize;
-        let pat_id = seq.get_var_int()?.0 as usize;
+        let _show_in_tooltip = seq.get_bool()?;
+        
+        let mat_id = seq.get_var_int()?.0 as u32;
+        let pat_id = seq.get_var_int()?.0 as u32;
 
         let material = pumpkin_data::trim_material::TrimMaterial::all()
-            .get(mat_id)
+            .iter()
+            .find(|m| m.id() == mat_id)
             .map_or("minecraft:quartz", |m| m.asset_id());
         
         let pattern = pumpkin_data::trim_pattern::TrimPattern::all()
-            .get(pat_id)
+            .iter()
+            .find(|p| p.id() == pat_id)
             .map_or("minecraft:coast", |p| p.asset_id());
 
         Ok(Self {
