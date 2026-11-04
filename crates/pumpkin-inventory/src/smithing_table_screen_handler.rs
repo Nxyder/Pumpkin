@@ -18,6 +18,7 @@ use pumpkin_data::statistic::StatisticCategory;
 use pumpkin_nbt::tag::NbtTag;
 use pumpkin_protocol::codec::recipe::DynamicRecipe;
 use pumpkin_protocol::java::server::play::SlotActionType;
+use tracing::{info, warn};
 
 pub struct SmithingTableScreenHandler {
     behaviour: ScreenHandlerBehaviour,
@@ -47,19 +48,16 @@ impl SmithingTableScreenHandler {
             handler.input_inventory.clone(),
             0,
             0, // Template
-            handler.recipe_provider.clone(),
         )));
         handler.add_slot(Arc::new(SmithingInputSlot::new(
             handler.input_inventory.clone(),
             1,
             1, // Base
-            handler.recipe_provider.clone(),
         )));
         handler.add_slot(Arc::new(SmithingInputSlot::new(
             handler.input_inventory.clone(),
             2,
             2, // Addition
-            handler.recipe_provider.clone(),
         )));
         handler.add_slot(Arc::new(SmithingOutputSlot::new(
             handler.output_inventory.clone(),
@@ -79,8 +77,16 @@ impl SmithingTableScreenHandler {
         base: &ItemStack,
         addition: &ItemStack,
     ) -> Option<ItemStack> {
+        warn!(
+            "[SMITHING DEBUG] find_transform_result: template={}, base={}, addition={}",
+            template.get_item().registry_key,
+            base.get_item().registry_key,
+            addition.get_item().registry_key
+        );
+
         if let Some(recipe) = get_smithing_transform_recipe(template.item, base.item, addition.item)
         {
+            warn!("[SMITHING DEBUG] Found static transform recipe: {:?}", recipe.result);
             let res_key = recipe
                 .result
                 .id
@@ -96,25 +102,29 @@ impl SmithingTableScreenHandler {
 
         if let Some(provider) = &self.recipe_provider {
             for dynamic in provider.get_dynamic_recipes() {
-                if let DynamicRecipe::SmithingTransform(recipe) = dynamic
-                    && recipe.template.match_item(template.item)
-                    && recipe.base.match_item(base.item)
-                    && recipe.addition.match_item(addition.item)
-                {
-                    let res_key = recipe
-                        .result
-                        .item_id
-                        .strip_prefix("minecraft:")
-                        .unwrap_or(&recipe.result.item_id);
-                    if let Some(target_item) = Item::from_registry_key(res_key) {
-                        let mut result = base.clone();
-                        result.item = target_item;
-                        result.item_count = recipe.result.count;
-                        return Some(result);
+                if let DynamicRecipe::SmithingTransform(recipe) = dynamic {
+                    warn!("[SMITHING DEBUG] Checking dynamic transform recipe: {:?}", recipe.result);
+                    if recipe.template.match_item(template.item)
+                        && recipe.base.match_item(base.item)
+                        && recipe.addition.match_item(addition.item)
+                    {
+                        warn!("[SMITHING DEBUG] Dynamic transform recipe MATCHED");
+                        let res_key = recipe
+                            .result
+                            .item_id
+                            .strip_prefix("minecraft:")
+                            .unwrap_or(&recipe.result.item_id);
+                        if let Some(target_item) = Item::from_registry_key(res_key) {
+                            let mut result = base.clone();
+                            result.item = target_item;
+                            result.item_count = recipe.result.count;
+                            return Some(result);
+                        }
                     }
                 }
             }
         }
+        warn!("[SMITHING DEBUG] No transform result found");
         None
     }
 
@@ -124,11 +134,19 @@ impl SmithingTableScreenHandler {
         base: &ItemStack,
         addition: &ItemStack,
     ) -> Option<String> {
+        warn!(
+            "[SMITHING DEBUG] find_trim_pattern: template={}, base={}, addition={}",
+            template.get_item().registry_key,
+            base.get_item().registry_key,
+            addition.get_item().registry_key
+        );
+
         if let Some(recipe) = get_smithing_trim_recipe(template.item, base.item, addition.item) {
+            warn!("[SMITHING DEBUG] Found static trim recipe: {}", recipe.pattern);
             return Some(recipe.pattern.to_string());
         }
         let provider = self.recipe_provider.as_ref()?;
-        provider.get_dynamic_recipes().iter().find_map(|d| {
+        let result = provider.get_dynamic_recipes().iter().find_map(|d| {
             if let DynamicRecipe::SmithingTrim(recipe) = d
                 && recipe.template.match_item(template.item)
                 && recipe.base.match_item(base.item)
@@ -139,11 +157,16 @@ impl SmithingTableScreenHandler {
                     .registry_key
                     .strip_suffix("_armor_trim_smithing_template")
                     .unwrap_or(template.item.registry_key);
+                warn!("[SMITHING DEBUG] Dynamic trim recipe MATCHED: {}", pattern);
                 Some(pattern.to_string())
             } else {
                 None
             }
-        })
+        });
+        if result.is_none() {
+            warn!("[SMITHING DEBUG] No trim pattern found");
+        }
+        result
     }
 
     pub fn update_output(&self) {
@@ -151,7 +174,15 @@ impl SmithingTableScreenHandler {
         let base_stack = self.input_inventory.get_stack(1);
         let addition_stack = self.input_inventory.get_stack(2);
 
+        warn!(
+            "[SMITHING DEBUG] update_output: template={}, base={}, addition={}",
+            template_stack.get_item().registry_key,
+            base_stack.get_item().registry_key,
+            addition_stack.get_item().registry_key
+        );
+
         if template_stack.is_empty() || base_stack.is_empty() || addition_stack.is_empty() {
+            warn!("[SMITHING DEBUG] One or more slots are empty, clearing output");
             self.output_inventory.set_stack(0, ItemStack::EMPTY.clone());
             return;
         }
@@ -159,6 +190,7 @@ impl SmithingTableScreenHandler {
         if let Some(result) =
             self.find_transform_result(&template_stack, &base_stack, &addition_stack)
         {
+            warn!("[SMITHING DEBUG] Transform result: {}", result.get_item().registry_key);
             self.output_inventory.set_stack(0, result);
             return;
         }
@@ -167,6 +199,8 @@ impl SmithingTableScreenHandler {
             && let Some(provides) = addition_stack.get_data_component::<ProvidesTrimMaterialImpl>()
         {
             let material = provides.material.as_ref();
+            warn!("[SMITHING DEBUG] Trim pattern: {}, material: {}", pattern, material);
+            
             if let Some(trim) = base_stack.get_data_component::<TrimImpl>() {
                 let curr_mat = match &trim.material {
                     NbtTag::String(s) => s.as_ref(),
@@ -177,6 +211,7 @@ impl SmithingTableScreenHandler {
                     _ => "",
                 };
                 if curr_mat == material && curr_pat == pattern {
+                    warn!("[SMITHING DEBUG] Same trim already applied, clearing output");
                     self.output_inventory.set_stack(0, ItemStack::EMPTY.clone());
                     return;
                 }
@@ -189,10 +224,12 @@ impl SmithingTableScreenHandler {
                 pattern: NbtTag::String(pattern.into()),
             });
 
+            warn!("[SMITHING DEBUG] Setting output to trim: material={}, pattern={}", material, pattern);
             self.output_inventory.set_stack(0, result);
             return;
         }
 
+        warn!("[SMITHING DEBUG] No valid recipe, clearing output");
         self.output_inventory.set_stack(0, ItemStack::EMPTY.clone());
     }
 }
@@ -221,6 +258,7 @@ impl ScreenHandler for SmithingTableScreenHandler {
         action_type: SlotActionType,
         player: &dyn InventoryPlayer,
     ) {
+        warn!("[SMITHING DEBUG] on_slot_click: slot={}, button={}, action={:?}", slot_index, button, action_type);
         self.internal_on_slot_click(slot_index, button, action_type, player);
         if (0..=3).contains(&slot_index) {
             self.update_output();
@@ -228,6 +266,7 @@ impl ScreenHandler for SmithingTableScreenHandler {
     }
 
     fn quick_move(&mut self, player: &dyn InventoryPlayer, slot_index: i32) -> ItemStack {
+        warn!("[SMITHING DEBUG] quick_move: slot={}", slot_index);
         let mut stack = ItemStack::EMPTY.clone();
         let slot = self.get_behaviour().slots.get(slot_index as usize).cloned();
 
@@ -272,6 +311,7 @@ impl ScreenHandler for SmithingTableScreenHandler {
     }
 
     fn on_closed(&mut self, player: &dyn InventoryPlayer) {
+        warn!("[SMITHING DEBUG] on_closed");
         self.default_on_closed(player);
         self.drop_inventory(player, self.input_inventory.clone());
     }
@@ -282,22 +322,15 @@ pub struct SmithingInputSlot {
     pub index: usize,
     pub slot_type: u8, // 0 = Template, 1 = Base, 2 = Addition
     pub id: AtomicU8,
-    pub recipe_provider: Option<Arc<dyn RecipeProvider>>,
 }
 
 impl SmithingInputSlot {
-    pub fn new(
-        inventory: Arc<dyn Inventory>,
-        index: usize,
-        slot_type: u8,
-        recipe_provider: Option<Arc<dyn RecipeProvider>>,
-    ) -> Self {
+    pub fn new(inventory: Arc<dyn Inventory>, index: usize, slot_type: u8) -> Self {
         Self {
             inventory,
             index,
             slot_type,
             id: AtomicU8::new(0),
-            recipe_provider,
         }
     }
 
@@ -308,63 +341,32 @@ impl SmithingInputSlot {
 
         let item = stack.item;
 
-        // Base-slot (index 1): Check of het item een tool of armor is.
-        // Dit is de standaard vanilla regel voor transformaties (Netherite, etc.).
-        if self.slot_type == 1 {
-            let key = item.registry_key;
-            return key.contains("sword")
-                || key.contains("pickaxe")
-                || key.contains("axe")
-                || key.contains("shovel")
-                || key.contains("hoe")
-                || key.contains("helmet")
-                || key.contains("chestplate")
-                || key.contains("leggings")
-                || key.contains("boots")
-                || key.contains("turtle_helmet");
-        }
-
-        // Template-slot (0) en Addition-slot (2): Gebruik de recipe data.
-        // Als een item in een geregistreerd recept voorkomt in deze rol, is het geldig.
-        if let Some(provider) = &self.recipe_provider {
-            for dynamic in provider.get_dynamic_recipes() {
-                match dynamic {
-                    DynamicRecipe::SmithingTransform(recipe) => {
-                        if self.slot_type == 0 && recipe.template.match_item(item) {
-                            return true;
-                        }
-                        if self.slot_type == 2 && recipe.addition.match_item(item) {
-                            return true;
-                        }
-                    }
-                    DynamicRecipe::SmithingTrim(recipe) => {
-                        if self.slot_type == 0 && recipe.template.match_item(item) {
-                            return true;
-                        }
-                        if self.slot_type == 2 && recipe.addition.match_item(item) {
-                            return true;
-                        }
-                    }
-                    _ => {}
-                }
+        let valid = match self.slot_type {
+            0 => {
+                item.registry_key.contains("smithing_template") || item.registry_key.contains("_armor_trim")
             }
-        }
+            1 => {
+                item.registry_key.contains("helmet") || item.registry_key.contains("chestplate")
+                || item.registry_key.contains("leggings") || item.registry_key.contains("boots")
+                || item.registry_key.contains("sword") || item.registry_key.contains("pickaxe")
+                || item.registry_key.contains("axe") || item.registry_key.contains("shovel")
+                || item.registry_key.contains("hoe")
+            }
+            2 => {
+                item.registry_key.contains("ingot") || item.registry_key.contains("diamond")
+                || item.registry_key.contains("emerald") || item.registry_key.contains("quartz")
+                || item.registry_key.contains("netherite_scrap") || item.registry_key.contains("lapis")
+                || item.registry_key.contains("redstone")
+            }
+            _ => false,
+        };
 
-        // Fallback voor vanilla items als er geen datapack recepten zijn geladen.
-        if self.slot_type == 0 {
-            return item.registry_key.contains("smithing_template");
-        }
-        if self.slot_type == 2 {
-            return item.registry_key.contains("ingot")
-                || item.registry_key.contains("diamond")
-                || item.registry_key.contains("emerald")
-                || item.registry_key.contains("quartz")
-                || item.registry_key.contains("netherite_scrap")
-                || item.registry_key.contains("lapis")
-                || item.registry_key.contains("amethyst");
-        }
+        warn!(
+            "[SMITHING DEBUG] is_valid_for_slot: item={}, slot_type={}, valid={}",
+            item.registry_key, self.slot_type, valid
+        );
 
-        false
+        valid
     }
 }
 
@@ -394,6 +396,10 @@ impl Slot for SmithingInputSlot {
     }
 
     fn set_stack(&self, stack: ItemStack) {
+        warn!(
+            "[SMITHING DEBUG] set_stack: slot={}, item={}, count={}",
+            self.index, stack.get_item().registry_key, stack.item_count
+        );
         self.inventory.set_stack(self.index, stack);
     }
 
@@ -446,6 +452,7 @@ impl Slot for SmithingOutputSlot {
     }
 
     fn on_take_item(&self, player: &dyn InventoryPlayer, stack: &ItemStack) {
+        warn!("[SMITHING DEBUG] on_take_item: item={}, count={}", stack.get_item().registry_key, stack.item_count);
         player.increment_stat(
             StatisticCategory::Crafted,
             stack.item.id as i32,
@@ -474,6 +481,7 @@ impl Slot for SmithingOutputSlot {
     }
 
     fn set_stack(&self, stack: ItemStack) {
+        warn!("[SMITHING DEBUG] output set_stack: item={}, count={}", stack.get_item().registry_key, stack.item_count);
         self.inventory.set_stack(self.index, stack);
     }
 
